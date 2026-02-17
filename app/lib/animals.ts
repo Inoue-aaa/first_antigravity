@@ -10,7 +10,7 @@ export const ANIMAL_STICKERS: AnimalSticker[] = [
   { id: "squirrel", name: "Squirrel", src: "/animals/squirrel.png" },
   { id: "hamster", name: "Hamster", src: "/animals/hamster.png" },
   { id: "hedgehog", name: "Hedgehog", src: "/animals/hedgehog.png" },
-  { id: "owl", name: "Owl", src: "/animals/owl.png" },
+  { id: "monkey", name: "Monkey", src: "/animals/monkey.png" },
 ];
 
 export function getAnimalById(animalId: string): AnimalSticker | undefined {
