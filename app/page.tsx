@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { DeviceTemplate } from "./lib/devices";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { DEVICE_TEMPLATES, DeviceTemplate } from "./lib/devices";
 import DeviceSelector from "./components/DeviceSelector";
 import ImageUploader from "./components/ImageUploader";
 import ImageCropper from "./components/ImageCropper";
@@ -11,22 +11,91 @@ import DownloadButton from "./components/DownloadButton";
 
 type Step = "device" | "upload" | "crop" | "animal" | "preview";
 
+type PersistedEditorState = {
+  step: Step;
+  deviceId: string | null;
+  rawImage: string | null;
+  croppedImage: string | null;
+  animalId: string | null;
+  stickerXPercent: number;
+};
+
 const STEP_ORDER: Step[] = ["device", "upload", "crop", "animal", "preview"];
 const STEP_LABELS: Record<Step, string> = {
   device: "機種選択",
-  upload: "画像",
+  upload: "画像アップロード",
   crop: "トリミング",
-  animal: "スタンプ",
+  animal: "スタンプ選択",
   preview: "プレビュー",
 };
 
+const EDITOR_STATE_KEY = "wallpaper_editor_state";
+
+function isStep(value: unknown): value is Step {
+  return typeof value === "string" && STEP_ORDER.includes(value as Step);
+}
+
+function readPersistedEditorState(): PersistedEditorState | null {
+  if (typeof window === "undefined") return null;
+  const raw = sessionStorage.getItem(EDITOR_STATE_KEY);
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<PersistedEditorState>;
+    if (!isStep(parsed.step)) return null;
+    return {
+      step: parsed.step,
+      deviceId: typeof parsed.deviceId === "string" ? parsed.deviceId : null,
+      rawImage: typeof parsed.rawImage === "string" ? parsed.rawImage : null,
+      croppedImage:
+        typeof parsed.croppedImage === "string" ? parsed.croppedImage : null,
+      animalId: typeof parsed.animalId === "string" ? parsed.animalId : null,
+      stickerXPercent:
+        typeof parsed.stickerXPercent === "number" ? parsed.stickerXPercent : 50,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
-  const [step, setStep] = useState<Step>("device");
-  const [device, setDevice] = useState<DeviceTemplate | null>(null);
-  const [rawImage, setRawImage] = useState<string | null>(null);
-  const [croppedImage, setCroppedImage] = useState<string | null>(null);
-  const [animalId, setAnimalId] = useState<string | null>(null);
-  const [stickerXPercent, setStickerXPercent] = useState<number>(50);
+  const initialState = useMemo(() => readPersistedEditorState(), []);
+
+  const [step, setStep] = useState<Step>(initialState?.step ?? "device");
+  const [device, setDevice] = useState<DeviceTemplate | null>(() => {
+    if (!initialState?.deviceId) return null;
+    return DEVICE_TEMPLATES.find((d) => d.id === initialState.deviceId) ?? null;
+  });
+  const [rawImage, setRawImage] = useState<string | null>(
+    initialState?.rawImage ?? null,
+  );
+  const [croppedImage, setCroppedImage] = useState<string | null>(
+    initialState?.croppedImage ?? null,
+  );
+  const [animalId, setAnimalId] = useState<string | null>(
+    initialState?.animalId ?? null,
+  );
+  const [stickerXPercent, setStickerXPercent] = useState<number>(
+    initialState?.stickerXPercent ?? 50,
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const data: PersistedEditorState = {
+      step,
+      deviceId: device?.id ?? null,
+      rawImage,
+      croppedImage,
+      animalId,
+      stickerXPercent,
+    };
+
+    try {
+      sessionStorage.setItem(EDITOR_STATE_KEY, JSON.stringify(data));
+    } catch {
+      // Ignore quota errors on very large data URLs.
+    }
+  }, [animalId, croppedImage, device, rawImage, step, stickerXPercent]);
 
   const currentStepIdx = STEP_ORDER.indexOf(step);
 
@@ -52,7 +121,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
-      {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
@@ -66,7 +134,6 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Step indicator */}
       <div className="max-w-3xl mx-auto w-full px-4 py-4">
         <div className="flex items-center gap-1">
           {STEP_ORDER.map((s, i) => (
@@ -101,7 +168,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Content */}
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-8">
         {step === "device" && (
           <DeviceSelector
@@ -142,7 +208,7 @@ export default function Home() {
                 className="w-full accent-blue-500"
               />
               <p className="mt-2 text-xs text-zinc-400">
-                Dynamic Islandの幅内だけで左右移動します。
+                Dynamic Island の幅内だけで左右移動します。
               </p>
             </div>
             <WallpaperPreview
@@ -160,7 +226,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Back button */}
         {step !== "device" && (
           <button
             onClick={() => {
@@ -174,12 +239,11 @@ export default function Home() {
               transition-all
             "
           >
-            ← 戻る
+            戻る
           </button>
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-zinc-800 py-4 text-center text-xs text-zinc-600">
         画像はすべてブラウザ内で処理されます。サーバーへのアップロードはありません。
       </footer>

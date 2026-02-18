@@ -1,0 +1,77 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
+const RETURN_TO_KEY = "returnTo";
+
+export default function ViewPage() {
+  const router = useRouter();
+  const [blobUrl] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return sessionStorage.getItem(VIEW_BLOB_URL_KEY);
+  });
+
+  useEffect(() => {
+    if (!blobUrl) return;
+
+    return () => {
+      URL.revokeObjectURL(blobUrl);
+      sessionStorage.removeItem(VIEW_BLOB_URL_KEY);
+    };
+  }, [blobUrl]);
+
+  const handleReturn = useCallback(() => {
+    const returnTo = sessionStorage.getItem(RETURN_TO_KEY);
+    if (returnTo) {
+      router.replace(returnTo);
+      return;
+    }
+
+    if (window.history.length > 1) {
+      router.back();
+      window.setTimeout(() => {
+        router.replace("/");
+      }, 300);
+      return;
+    }
+
+    router.replace("/");
+  }, [router]);
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+      <div className="mx-auto w-full max-w-3xl px-4 py-6">
+        <h1 className="text-xl font-bold">保存用画像</h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          長押し、またはブラウザの共有メニューから保存してください。
+        </p>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center px-4 pb-8">
+        {blobUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={blobUrl}
+            alt="Generated wallpaper"
+            className="max-h-[80vh] w-auto max-w-full rounded-xl border border-zinc-700"
+          />
+        ) : (
+          <div className="text-center text-zinc-400">
+            表示する画像が見つかりませんでした。
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-zinc-800 px-4 py-4 text-center">
+        <button
+          onClick={handleReturn}
+          className="text-sm text-zinc-300 underline hover:text-zinc-100"
+        >
+          アプリに戻る
+        </button>
+      </div>
+    </main>
+  );
+}

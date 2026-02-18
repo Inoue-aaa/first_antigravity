@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   DeviceTemplate,
   getStickerPosition,
@@ -21,7 +22,10 @@ export default function DownloadButton({
   animalId,
   stickerXPercent,
 }: Props) {
+  const router = useRouter();
   const fileName = `wallpaper_${device.id}_${device.width}x${device.height}.png`;
+  const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
+  const RETURN_TO_KEY = "returnTo";
 
   const shareSupported = useMemo(() => {
     if (typeof navigator === "undefined") return false;
@@ -116,13 +120,16 @@ export default function DownloadButton({
     try {
       const blob = await makePngBlob();
       const url = URL.createObjectURL(blob);
-      revokeObjectUrlLater(url);
-      // Same-tab navigation is robust on mobile Safari and avoids popup blockers.
-      window.location.href = url;
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      sessionStorage.setItem(RETURN_TO_KEY, returnTo);
+      const prevUrl = sessionStorage.getItem(VIEW_BLOB_URL_KEY);
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      sessionStorage.setItem(VIEW_BLOB_URL_KEY, url);
+      router.push("/view");
     } catch (err) {
       console.error(err);
     }
-  }, [makePngBlob, revokeObjectUrlLater]);
+  }, [RETURN_TO_KEY, VIEW_BLOB_URL_KEY, makePngBlob, router]);
 
   const handleShare = useCallback(async () => {
     if (!shareSupported || typeof navigator === "undefined") {
