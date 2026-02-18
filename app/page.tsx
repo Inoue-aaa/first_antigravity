@@ -30,6 +30,7 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 const EDITOR_STATE_KEY = "wallpaper_editor_state";
+const LAST_APP_ROUTE_KEY = "lastAppRoute";
 
 function isStep(value: unknown): value is Step {
   return typeof value === "string" && STEP_ORDER.includes(value as Step);
@@ -60,8 +61,23 @@ function readPersistedEditorState(): PersistedEditorState | null {
 
 export default function Home() {
   const initialState = useMemo(() => readPersistedEditorState(), []);
+  const shouldStartAtPreview = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get("step") === "preview";
+  }, []);
 
-  const [step, setStep] = useState<Step>(initialState?.step ?? "device");
+  const [step, setStep] = useState<Step>(() => {
+    if (
+      shouldStartAtPreview &&
+      initialState?.deviceId &&
+      initialState?.croppedImage &&
+      initialState?.animalId
+    ) {
+      return "preview";
+    }
+    return initialState?.step ?? "device";
+  });
   const [device, setDevice] = useState<DeviceTemplate | null>(() => {
     if (!initialState?.deviceId) return null;
     return DEVICE_TEMPLATES.find((d) => d.id === initialState.deviceId) ?? null;
@@ -96,6 +112,14 @@ export default function Home() {
       // Ignore quota errors on very large data URLs.
     }
   }, [animalId, croppedImage, device, rawImage, step, stickerXPercent]);
+
+  useEffect(() => {
+    if (step === "preview") {
+      sessionStorage.setItem(LAST_APP_ROUTE_KEY, "/?step=preview");
+    } else {
+      sessionStorage.setItem(LAST_APP_ROUTE_KEY, "/");
+    }
+  }, [step]);
 
   const currentStepIdx = STEP_ORDER.indexOf(step);
 

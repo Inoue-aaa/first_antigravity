@@ -26,17 +26,44 @@ export default function WallpaperPreview({
   const [animalImg, setAnimalImg] = useState<HTMLImageElement | null>(null);
   const [displayScale, setDisplayScale] = useState(1);
 
-  // Calculate display scale to fit viewport
+  // Calculate display scale with debounce and threshold to reduce iOS viewport jitter.
   useEffect(() => {
+    let rafId: number | null = null;
+    let timerId: number | null = null;
+
     const updateScale = () => {
-      const maxH = window.innerHeight * 0.6;
-      const maxW = Math.min(360, window.innerWidth - 48);
-      const s = Math.min(maxW / device.width, maxH / device.height);
-      setDisplayScale(s);
+      const viewportHeight =
+        window.visualViewport?.height ?? window.innerHeight;
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const maxH = viewportHeight * 0.6;
+      const maxW = Math.min(360, viewportWidth - 48);
+      const rawScale = Math.min(maxW / device.width, maxH / device.height);
+      const roundedScale = Math.max(0.1, Math.round(rawScale * 1000) / 1000);
+      setDisplayScale((prev) =>
+        Math.abs(prev - roundedScale) < 0.01 ? prev : roundedScale,
+      );
     };
+
+    const scheduleScaleUpdate = () => {
+      if (timerId !== null) window.clearTimeout(timerId);
+      timerId = window.setTimeout(() => {
+        if (rafId !== null) window.cancelAnimationFrame(rafId);
+        rafId = window.requestAnimationFrame(updateScale);
+      }, 100);
+    };
+
     updateScale();
-    window.addEventListener("resize", updateScale);
-    return () => window.removeEventListener("resize", updateScale);
+    window.addEventListener("resize", scheduleScaleUpdate);
+    window.addEventListener("orientationchange", scheduleScaleUpdate);
+    window.visualViewport?.addEventListener("resize", scheduleScaleUpdate);
+
+    return () => {
+      window.removeEventListener("resize", scheduleScaleUpdate);
+      window.removeEventListener("orientationchange", scheduleScaleUpdate);
+      window.visualViewport?.removeEventListener("resize", scheduleScaleUpdate);
+      if (timerId !== null) window.clearTimeout(timerId);
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
   }, [device]);
 
   // Load background
@@ -61,8 +88,8 @@ export default function WallpaperPreview({
     if (!canvas || !bgImg) return;
     const ctx = canvas.getContext("2d")!;
 
-    const dw = device.width * displayScale;
-    const dh = device.height * displayScale;
+    const dw = Math.max(1, Math.round(device.width * displayScale));
+    const dh = Math.max(1, Math.round(device.height * displayScale));
     canvas.width = dw;
     canvas.height = dh;
 
@@ -114,16 +141,16 @@ export default function WallpaperPreview({
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <h2 className="text-xl font-bold text-center">👀 プレビュー</h2>
+      <h2 className="text-xl font-bold text-center">プレビュー</h2>
       <p className="text-zinc-400 text-sm text-center">
         スタンプはDynamic Island直上に自動配置されます
       </p>
 
       <div
-        className="rounded-[2rem] overflow-hidden border-4 border-zinc-700 shadow-2xl"
+        className="preview-shell rounded-[2rem] overflow-hidden border-4 border-zinc-700 shadow-2xl"
         style={{
-          width: device.width * displayScale,
-          height: device.height * displayScale,
+          width: Math.max(1, Math.round(device.width * displayScale)),
+          height: Math.max(1, Math.round(device.height * displayScale)),
         }}
       >
         <canvas

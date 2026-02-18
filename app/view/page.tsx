@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
 const RETURN_TO_KEY = "returnTo";
+const LAST_APP_ROUTE_KEY = "lastAppRoute";
 
 export default function ViewPage() {
   const router = useRouter();
@@ -24,20 +25,18 @@ export default function ViewPage() {
 
   const handleReturn = useCallback(() => {
     const returnTo = sessionStorage.getItem(RETURN_TO_KEY);
-    if (returnTo) {
-      router.replace(returnTo);
-      return;
-    }
+    const lastAppRoute = sessionStorage.getItem(LAST_APP_ROUTE_KEY);
+    const fallbackRoute = returnTo ?? lastAppRoute ?? "/?step=preview";
 
     if (window.history.length > 1) {
       router.back();
       window.setTimeout(() => {
-        router.replace("/");
-      }, 300);
+        router.replace(fallbackRoute);
+      }, 350);
       return;
     }
 
-    router.replace("/");
+    router.replace(fallbackRoute);
   }, [router]);
 
   return (
