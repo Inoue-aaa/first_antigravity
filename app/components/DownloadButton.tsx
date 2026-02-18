@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import {
   DeviceTemplate,
   getStickerPosition,
@@ -21,28 +21,51 @@ export default function DownloadButton({
   animalId,
   stickerXPercent,
 }: Props) {
-  const handleDownload = useCallback(async () => {
+  const fileName = `wallpaper_${device.id}_${device.width}x${device.height}.png`;
+
+  const shareSupported = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return typeof navigator.share === "function" && typeof File !== "undefined";
+  }, []);
+
+  const revokeObjectUrlLater = useCallback((url: string, delayMs: number = 30000) => {
+    window.setTimeout(() => URL.revokeObjectURL(url), delayMs);
+  }, []);
+
+  const canvasToPngBlob = useCallback((canvas: HTMLCanvasElement) => {
+    return new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("Failed to create PNG blob"));
+          return;
+        }
+        resolve(blob);
+      }, "image/png");
+    });
+  }, []);
+
+  const loadImage = useCallback((src: string) => {
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+      img.src = src;
+    });
+  }, []);
+
+  const renderWallpaperCanvas = useCallback(async () => {
     const canvas = document.createElement("canvas");
     canvas.width = device.width;
     canvas.height = device.height;
-    const ctx = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Failed to get canvas context");
 
-    // Draw background at full resolution
-    const bgImg = new Image();
-    bgImg.src = croppedSrc;
-    await new Promise<void>((res) => {
-      bgImg.onload = () => res();
-    });
+    const bgImg = await loadImage(croppedSrc);
     ctx.drawImage(bgImg, 0, 0, device.width, device.height);
 
-    // Draw animal at fixed position (same computation as preview)
     const animal = getAnimalById(animalId);
-    if (!animal) return;
-    const animalImg = new Image();
-    animalImg.src = animal.src;
-    await new Promise<void>((res) => {
-      animalImg.onload = () => res();
-    });
+    if (!animal) throw new Error("Animal not found");
+    const animalImg = await loadImage(animal.src);
 
     const stickerAspect = animalImg.naturalWidth / animalImg.naturalHeight;
     const pos = getStickerPosition(
@@ -52,7 +75,6 @@ export default function DownloadButton({
       stickerXPercent / 100,
     );
 
-    // Drop shadow (matches preview)
     ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
     ctx.shadowBlur = 4;
     ctx.shadowOffsetX = 0;
@@ -61,38 +83,119 @@ export default function DownloadButton({
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(animalImg, pos.x, pos.y, pos.w, pos.h);
 
-    // Reset shadow
     ctx.shadowColor = "transparent";
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
 
-    // Download
-    canvas.toBlob((blob) => {
-      if (!blob) return;
+    return canvas;
+  }, [animalId, croppedSrc, device, loadImage, stickerXPercent]);
+
+  const handleDownload = useCallback(async () => {
+    try {
+      const canvas = await renderWallpaperCanvas();
+      const blob = await canvasToPngBlob(canvas);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `wallpaper_${device.id}_${device.width}x${device.height}.png`;
+      a.download = fileName;
+      a.rel = "noopener";
       a.click();
-      URL.revokeObjectURL(url);
-    }, "image/png");
-  }, [device, croppedSrc, animalId, stickerXPercent]);
+      revokeObjectUrlLater(url, 10000);
+    } catch (err) {
+      console.error(err);
+    }
+  }, [canvasToPngBlob, fileName, renderWallpaperCanvas, revokeObjectUrlLater]);
+
+  const handleOpenImage = useCallback(async () => {
+    const popup = window.open("about:blank", "_blank", "noopener,noreferrer");
+    try {
+      const canvas = await renderWallpaperCanvas();
+      const blob = await canvasToPngBlob(canvas);
+      const url = URL.createObjectURL(blob);
+
+      if (popup) {
+        popup.location.href = url;
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+      revokeObjectUrlLater(url, 60000);
+    } catch (err) {
+      if (popup && !popup.closed) popup.close();
+      console.error(err);
+    }
+  }, [canvasToPngBlob, renderWallpaperCanvas, revokeObjectUrlLater]);
+
+  const handleShare = useCallback(async () => {
+    if (!shareSupported || typeof navigator === "undefined") return;
+    try {
+      const canvas = await renderWallpaperCanvas();
+      const blob = await canvasToPngBlob(canvas);
+      const file = new File([blob], fileName, { type: "image/png" });
+      const nav = navigator as Navigator & {
+        canShare?: (data?: ShareData) => boolean;
+      };
+
+      if (nav.canShare && !nav.canShare({ files: [file] })) {
+        await handleOpenImage();
+        return;
+      }
+
+      await navigator.share({
+        title: "Wallpaper PNG",
+        files: [file],
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }, [
+    canvasToPngBlob,
+    fileName,
+    handleOpenImage,
+    renderWallpaperCanvas,
+    shareSupported,
+  ]);
 
   return (
-    <button
-      onClick={handleDownload}
-      className="
-        px-10 py-4 rounded-full text-lg font-bold
-        bg-gradient-to-r from-green-500 to-emerald-600
-        text-white shadow-xl shadow-green-600/30
-        hover:from-green-400 hover:to-emerald-500
-        transition-all duration-200 hover:scale-[1.03]
-        flex items-center gap-3
-      "
-    >
-      <span className="text-2xl">⬇️</span>
-      PNGをダウンロード
-    </button>
+    <div className="flex flex-col items-center gap-3">
+      <button
+        onClick={handleDownload}
+        className="
+          px-10 py-4 rounded-full text-lg font-bold
+          bg-gradient-to-r from-green-500 to-emerald-600
+          text-white shadow-xl shadow-green-600/30
+          hover:from-green-400 hover:to-emerald-500
+          transition-all duration-200 hover:scale-[1.03]
+        "
+      >
+        PNGをダウンロード
+      </button>
+
+      <button
+        onClick={handleOpenImage}
+        className="
+          px-8 py-3 rounded-full text-sm font-semibold
+          border border-zinc-600 bg-zinc-900 text-zinc-100
+          hover:border-zinc-400 hover:bg-zinc-800
+          transition-all duration-200
+        "
+      >
+        画像を開いて保存（スマホ向け）
+      </button>
+
+      {shareSupported && (
+        <button
+          onClick={handleShare}
+          className="
+            px-8 py-3 rounded-full text-sm font-semibold
+            border border-blue-500/50 bg-blue-500/10 text-blue-300
+            hover:bg-blue-500/20
+            transition-all duration-200
+          "
+        >
+          共有（対応端末）
+        </button>
+      )}
+    </div>
   );
 }
