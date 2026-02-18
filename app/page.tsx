@@ -56,7 +56,7 @@ export default function Home() {
       <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-            📱 iPhone Wallpaper Creator
+            iPhone Wallpaper Creator
           </h1>
           {device && (
             <span className="text-xs text-zinc-500">

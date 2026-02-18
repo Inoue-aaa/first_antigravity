@@ -12,10 +12,10 @@ export default function DeviceSelector({ onSelect, selectedId }: Props) {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      <h2 className="text-xl font-bold mb-6 text-center">📱 機種を選択</h2>
+      <h2 className="text-xl font-bold mb-6 text-center">機種を選択</h2>
       {Object.entries(groups).map(([groupName, devices]) => (
         <div key={groupName} className="mb-6">
-          <h3 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+          <h3 className="text-sm font-semibold text-zinc-400 tracking-wider mb-3">
             {groupName}
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
