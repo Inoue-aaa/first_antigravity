@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   DeviceTemplate,
@@ -16,6 +16,11 @@ interface Props {
   stickerXPercent: number;
 }
 
+type ActionKind = "share" | "openView" | null;
+
+const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
+const RETURN_TO_KEY = "returnTo";
+
 export default function DownloadButton({
   device,
   croppedSrc,
@@ -24,13 +29,33 @@ export default function DownloadButton({
 }: Props) {
   const router = useRouter();
   const fileName = `wallpaper_${device.id}_${device.width}x${device.height}.png`;
-  const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
-  const RETURN_TO_KEY = "returnTo";
+  const openViewLockRef = useRef(false);
+  const actionRef = useRef<ActionKind>(null);
 
   const shareSupported = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return typeof navigator.share === "function" && typeof File !== "undefined";
   }, []);
+
+  const clearPendingAction = useCallback(() => {
+    actionRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) clearPendingAction();
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) clearPendingAction();
+    };
+
+    window.addEventListener("pageshow", onPageShow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pageshow", onPageShow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [clearPendingAction]);
 
   const revokeObjectUrlLater = useCallback((url: string, delayMs: number = 60000) => {
     window.setTimeout(() => URL.revokeObjectURL(url), delayMs);
@@ -84,7 +109,6 @@ export default function DownloadButton({
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 2;
 
-    // Keep pixel-art crisp in exported PNG.
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(animalImg, pos.x, pos.y, pos.w, pos.h);
 
@@ -101,6 +125,30 @@ export default function DownloadButton({
     return canvasToPngBlob(canvas);
   }, [canvasToPngBlob, renderWallpaperCanvas]);
 
+  const openView = useCallback(async () => {
+    if (openViewLockRef.current) return;
+    openViewLockRef.current = true;
+    window.setTimeout(() => {
+      openViewLockRef.current = false;
+    }, 800);
+
+    actionRef.current = "openView";
+    try {
+      const blob = await makePngBlob();
+      const url = URL.createObjectURL(blob);
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      sessionStorage.setItem(RETURN_TO_KEY, returnTo);
+      const prevUrl = sessionStorage.getItem(VIEW_BLOB_URL_KEY);
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      sessionStorage.setItem(VIEW_BLOB_URL_KEY, url);
+      router.push("/view");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      clearPendingAction();
+    }
+  }, [clearPendingAction, makePngBlob, router]);
+
   const handleDownload = useCallback(async () => {
     try {
       const blob = await makePngBlob();
@@ -116,47 +164,53 @@ export default function DownloadButton({
     }
   }, [fileName, makePngBlob, revokeObjectUrlLater]);
 
-  const handleOpenForSave = useCallback(async () => {
-    try {
-      const blob = await makePngBlob();
-      const url = URL.createObjectURL(blob);
-      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      sessionStorage.setItem(RETURN_TO_KEY, returnTo);
-      const prevUrl = sessionStorage.getItem(VIEW_BLOB_URL_KEY);
-      if (prevUrl) URL.revokeObjectURL(prevUrl);
-      sessionStorage.setItem(VIEW_BLOB_URL_KEY, url);
-      router.push("/view");
-    } catch (err) {
-      console.error(err);
-    }
-  }, [RETURN_TO_KEY, VIEW_BLOB_URL_KEY, makePngBlob, router]);
+  const handleOpenForSave = useCallback(
+    async (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (!e.isTrusted) return;
+      await openView();
+    },
+    [openView],
+  );
 
-  const handleShare = useCallback(async () => {
-    if (!shareSupported || typeof navigator === "undefined") {
-      await handleOpenForSave();
-      return;
-    }
+  const handleShare = useCallback(
+    async (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (!e.isTrusted) return;
 
-    try {
-      const blob = await makePngBlob();
-      const file = new File([blob], fileName, { type: "image/png" });
-      const nav = navigator as Navigator & {
-        canShare?: (data?: ShareData) => boolean;
-      };
-
-      if (nav.canShare && !nav.canShare({ files: [file] })) {
-        await handleOpenForSave();
+      if (!shareSupported || typeof navigator === "undefined") {
+        await openView();
         return;
       }
 
-      await navigator.share({
-        title: "Wallpaper PNG",
-        files: [file],
-      });
-    } catch {
-      await handleOpenForSave();
-    }
-  }, [fileName, handleOpenForSave, makePngBlob, shareSupported]);
+      actionRef.current = "share";
+      try {
+        const blob = await makePngBlob();
+        const file = new File([blob], fileName, { type: "image/png" });
+        const nav = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+        };
+
+        if (nav.canShare && !nav.canShare({ files: [file] })) {
+          await openView();
+          return;
+        }
+
+        await navigator.share({
+          title: "Wallpaper PNG",
+          files: [file],
+        });
+      } catch (err: unknown) {
+        const name = err instanceof DOMException ? err.name : "";
+        if (name === "AbortError") {
+          // User canceled share sheet; do not trigger openView.
+          return;
+        }
+        console.error(err);
+      } finally {
+        clearPendingAction();
+      }
+    },
+    [clearPendingAction, fileName, makePngBlob, openView, shareSupported],
+  );
 
   return (
     <div className="flex flex-col items-center gap-3">
