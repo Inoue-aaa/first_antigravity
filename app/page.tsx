@@ -30,7 +30,8 @@ const STEP_LABELS: Record<Step, string> = {
 };
 
 const EDITOR_STATE_KEY = "wallpaper_editor_state";
-const LAST_APP_ROUTE_KEY = "lastAppRoute";
+const LAST_PREVIEW_ROUTE_KEY = "lastPreviewRoute";
+const INITIAL_ROUTE = "/?step=upload";
 
 function isStep(value: unknown): value is Step {
   return typeof value === "string" && STEP_ORDER.includes(value as Step);
@@ -61,13 +62,20 @@ function readPersistedEditorState(): PersistedEditorState | null {
 
 export default function Home() {
   const initialState = useMemo(() => readPersistedEditorState(), []);
-  const shouldStartAtPreview = useMemo(() => {
-    if (typeof window === "undefined") return false;
+  const queryStep = useMemo(() => {
+    if (typeof window === "undefined") return "";
     const params = new URLSearchParams(window.location.search);
-    return params.get("step") === "preview";
+    return params.get("step") ?? "";
   }, []);
+  const shouldStartAtPreview = useMemo(() => {
+    return queryStep === "preview";
+  }, [queryStep]);
+  const shouldForceInitial = useMemo(() => {
+    return queryStep === "upload";
+  }, [queryStep]);
 
   const [step, setStep] = useState<Step>(() => {
+    if (shouldForceInitial) return "device";
     if (
       shouldStartAtPreview &&
       initialState?.deviceId &&
@@ -96,6 +104,22 @@ export default function Home() {
   );
 
   useEffect(() => {
+    const navEntry = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    const navType = navEntry?.type;
+    const legacyType =
+      (performance as Performance & {
+        navigation?: { type?: number };
+      }).navigation?.type ?? -1;
+    const isReload = navType === "reload" || legacyType === 1;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (isReload && current !== INITIAL_ROUTE) {
+      window.location.replace(INITIAL_ROUTE);
+    }
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     const data: PersistedEditorState = {
       step,
@@ -120,7 +144,7 @@ export default function Home() {
         window.history.replaceState(window.history.state, "", previewUrl);
       }
       sessionStorage.setItem(
-        LAST_APP_ROUTE_KEY,
+        LAST_PREVIEW_ROUTE_KEY,
         `${window.location.pathname}${window.location.search}`,
       );
     } else {
@@ -128,10 +152,6 @@ export default function Home() {
       if (window.location.search) {
         window.history.replaceState(window.history.state, "", currentPath);
       }
-      sessionStorage.setItem(
-        LAST_APP_ROUTE_KEY,
-        `${window.location.pathname}${window.location.search}`,
-      );
     }
   }, [step]);
 

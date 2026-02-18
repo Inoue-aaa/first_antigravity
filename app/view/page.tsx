@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
-const RETURN_TO_KEY = "returnTo";
-const LAST_APP_ROUTE_KEY = "lastAppRoute";
+const LAST_PREVIEW_ROUTE_KEY = "lastPreviewRoute";
+const INITIAL_ROUTE = "/?step=upload";
 
 export default function ViewPage() {
   const router = useRouter();
@@ -21,6 +21,21 @@ export default function ViewPage() {
   }, [blobUrl]);
 
   useEffect(() => {
+    const navEntry = performance.getEntriesByType("navigation")[0] as
+      | PerformanceNavigationTiming
+      | undefined;
+    const navType = navEntry?.type;
+    const legacyType =
+      (performance as Performance & {
+        navigation?: { type?: number };
+      }).navigation?.type ?? -1;
+    const isReload = navType === "reload" || legacyType === 1;
+    if (isReload) {
+      window.location.replace(INITIAL_ROUTE);
+    }
+  }, []);
+
+  useEffect(() => {
     const id = window.requestAnimationFrame(() => {
       const url = sessionStorage.getItem(VIEW_BLOB_URL_KEY);
       setBlobUrl(url);
@@ -30,9 +45,8 @@ export default function ViewPage() {
   }, []);
 
   const handleReturn = useCallback(() => {
-    const returnTo = sessionStorage.getItem(RETURN_TO_KEY) ?? "";
-    const lastAppRoute = sessionStorage.getItem(LAST_APP_ROUTE_KEY) ?? "";
-    const target = returnTo || lastAppRoute || "/?step=preview";
+    const target =
+      sessionStorage.getItem(LAST_PREVIEW_ROUTE_KEY) ?? "/?step=preview";
     router.replace(target);
   }, [router]);
 
