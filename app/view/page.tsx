@@ -6,6 +6,20 @@ import { useRouter } from "next/navigation";
 const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
 const LAST_PREVIEW_ROUTE_KEY = "lastPreviewRoute";
 const INITIAL_ROUTE = "/?step=upload";
+const RELOAD_REDIRECT_GUARD_KEY = "reloadRedirectGuard";
+
+function isReloadNavigation(): boolean {
+  const navEntry = performance.getEntriesByType("navigation")[0] as
+    | PerformanceNavigationTiming
+    | undefined;
+  const navType = navEntry?.type;
+  const legacyType =
+    (performance as Performance & {
+      navigation?: { type?: number };
+    }).navigation?.type ?? -1;
+
+  return navType === "reload" || legacyType === 1;
+}
 
 export default function ViewPage() {
   const router = useRouter();
@@ -21,18 +35,14 @@ export default function ViewPage() {
   }, [blobUrl]);
 
   useEffect(() => {
-    const navEntry = performance.getEntriesByType("navigation")[0] as
-      | PerformanceNavigationTiming
-      | undefined;
-    const navType = navEntry?.type;
-    const legacyType =
-      (performance as Performance & {
-        navigation?: { type?: number };
-      }).navigation?.type ?? -1;
-    const isReload = navType === "reload" || legacyType === 1;
-    if (isReload) {
+    const isReload = isReloadNavigation();
+    const guard = sessionStorage.getItem(RELOAD_REDIRECT_GUARD_KEY);
+    if (isReload && guard !== "1") {
+      sessionStorage.setItem(RELOAD_REDIRECT_GUARD_KEY, "1");
       window.location.replace(INITIAL_ROUTE);
+      return;
     }
+    sessionStorage.removeItem(RELOAD_REDIRECT_GUARD_KEY);
   }, []);
 
   useEffect(() => {

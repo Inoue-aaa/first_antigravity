@@ -19,6 +19,7 @@ interface Props {
 type ActionKind = "share" | "openView" | null;
 
 const VIEW_BLOB_URL_KEY = "wallpaper_view_blob_url";
+const LAST_PREVIEW_ROUTE_KEY = "lastPreviewRoute";
 
 export default function DownloadButton({
   device,
@@ -135,6 +136,7 @@ export default function DownloadButton({
     try {
       const blob = await makePngBlob();
       const url = URL.createObjectURL(blob);
+      sessionStorage.setItem(LAST_PREVIEW_ROUTE_KEY, "/?step=preview");
       const prevUrl = sessionStorage.getItem(VIEW_BLOB_URL_KEY);
       if (prevUrl) URL.revokeObjectURL(prevUrl);
       sessionStorage.setItem(VIEW_BLOB_URL_KEY, url);

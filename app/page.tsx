@@ -32,6 +32,20 @@ const STEP_LABELS: Record<Step, string> = {
 const EDITOR_STATE_KEY = "wallpaper_editor_state";
 const LAST_PREVIEW_ROUTE_KEY = "lastPreviewRoute";
 const INITIAL_ROUTE = "/?step=upload";
+const RELOAD_REDIRECT_GUARD_KEY = "reloadRedirectGuard";
+
+function isReloadNavigation(): boolean {
+  const navEntry = performance.getEntriesByType("navigation")[0] as
+    | PerformanceNavigationTiming
+    | undefined;
+  const navType = navEntry?.type;
+  const legacyType =
+    (performance as Performance & {
+      navigation?: { type?: number };
+    }).navigation?.type ?? -1;
+
+  return navType === "reload" || legacyType === 1;
+}
 
 function isStep(value: unknown): value is Step {
   return typeof value === "string" && STEP_ORDER.includes(value as Step);
@@ -104,19 +118,15 @@ export default function Home() {
   );
 
   useEffect(() => {
-    const navEntry = performance.getEntriesByType("navigation")[0] as
-      | PerformanceNavigationTiming
-      | undefined;
-    const navType = navEntry?.type;
-    const legacyType =
-      (performance as Performance & {
-        navigation?: { type?: number };
-      }).navigation?.type ?? -1;
-    const isReload = navType === "reload" || legacyType === 1;
+    const isReload = isReloadNavigation();
     const current = `${window.location.pathname}${window.location.search}`;
-    if (isReload && current !== INITIAL_ROUTE) {
+    const guard = sessionStorage.getItem(RELOAD_REDIRECT_GUARD_KEY);
+    if (isReload && current !== INITIAL_ROUTE && guard !== "1") {
+      sessionStorage.setItem(RELOAD_REDIRECT_GUARD_KEY, "1");
       window.location.replace(INITIAL_ROUTE);
+      return;
     }
+    sessionStorage.removeItem(RELOAD_REDIRECT_GUARD_KEY);
   }, []);
 
   useEffect(() => {
@@ -147,11 +157,6 @@ export default function Home() {
         LAST_PREVIEW_ROUTE_KEY,
         `${window.location.pathname}${window.location.search}`,
       );
-    } else {
-      const currentPath = window.location.pathname;
-      if (window.location.search) {
-        window.history.replaceState(window.history.state, "", currentPath);
-      }
     }
   }, [step]);
 

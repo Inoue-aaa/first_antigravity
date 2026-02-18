@@ -26,18 +26,14 @@ export default function WallpaperPreview({
   const [animalImg, setAnimalImg] = useState<HTMLImageElement | null>(null);
   const [previewWidth, setPreviewWidth] = useState(320);
 
-  // Width-based sizing + raf debounce to reduce iOS Safari viewport jitter.
+  // Width-only sizing avoids iOS address-bar height jitter.
   useEffect(() => {
     let rafId: number | null = null;
     let timerId: number | null = null;
 
     const updateWidth = () => {
-      const viewportHeight =
-        window.visualViewport?.height ?? window.innerHeight;
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-      const maxByWidth = Math.min(360, viewportWidth - 48);
-      const maxByHeight = (viewportHeight * 0.6 * device.width) / device.height;
-      const target = Math.max(140, Math.min(maxByWidth, maxByHeight));
+      const target = Math.max(140, Math.min(360, viewportWidth - 48));
       const rounded = Math.round(target);
       setPreviewWidth((prev) =>
         Math.abs(prev - rounded) < 1 ? prev : rounded,
