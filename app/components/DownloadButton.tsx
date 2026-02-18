@@ -28,7 +28,7 @@ export default function DownloadButton({
     return typeof navigator.share === "function" && typeof File !== "undefined";
   }, []);
 
-  const revokeObjectUrlLater = useCallback((url: string, delayMs: number = 30000) => {
+  const revokeObjectUrlLater = useCallback((url: string, delayMs: number = 60000) => {
     window.setTimeout(() => URL.revokeObjectURL(url), delayMs);
   }, []);
 
@@ -80,6 +80,7 @@ export default function DownloadButton({
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 2;
 
+    // Keep pixel-art crisp in exported PNG.
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(animalImg, pos.x, pos.y, pos.w, pos.h);
 
@@ -91,53 +92,53 @@ export default function DownloadButton({
     return canvas;
   }, [animalId, croppedSrc, device, loadImage, stickerXPercent]);
 
+  const makePngBlob = useCallback(async () => {
+    const canvas = await renderWallpaperCanvas();
+    return canvasToPngBlob(canvas);
+  }, [canvasToPngBlob, renderWallpaperCanvas]);
+
   const handleDownload = useCallback(async () => {
     try {
-      const canvas = await renderWallpaperCanvas();
-      const blob = await canvasToPngBlob(canvas);
+      const blob = await makePngBlob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = fileName;
       a.rel = "noopener";
       a.click();
-      revokeObjectUrlLater(url, 10000);
+      revokeObjectUrlLater(url);
     } catch (err) {
       console.error(err);
     }
-  }, [canvasToPngBlob, fileName, renderWallpaperCanvas, revokeObjectUrlLater]);
+  }, [fileName, makePngBlob, revokeObjectUrlLater]);
 
-  const handleOpenImage = useCallback(async () => {
-    const popup = window.open("about:blank", "_blank", "noopener,noreferrer");
+  const handleOpenForSave = useCallback(async () => {
     try {
-      const canvas = await renderWallpaperCanvas();
-      const blob = await canvasToPngBlob(canvas);
+      const blob = await makePngBlob();
       const url = URL.createObjectURL(blob);
-
-      if (popup) {
-        popup.location.href = url;
-      } else {
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
-      revokeObjectUrlLater(url, 60000);
+      revokeObjectUrlLater(url);
+      // Same-tab navigation is robust on mobile Safari and avoids popup blockers.
+      window.location.href = url;
     } catch (err) {
-      if (popup && !popup.closed) popup.close();
       console.error(err);
     }
-  }, [canvasToPngBlob, renderWallpaperCanvas, revokeObjectUrlLater]);
+  }, [makePngBlob, revokeObjectUrlLater]);
 
   const handleShare = useCallback(async () => {
-    if (!shareSupported || typeof navigator === "undefined") return;
+    if (!shareSupported || typeof navigator === "undefined") {
+      await handleOpenForSave();
+      return;
+    }
+
     try {
-      const canvas = await renderWallpaperCanvas();
-      const blob = await canvasToPngBlob(canvas);
+      const blob = await makePngBlob();
       const file = new File([blob], fileName, { type: "image/png" });
       const nav = navigator as Navigator & {
         canShare?: (data?: ShareData) => boolean;
       };
 
       if (nav.canShare && !nav.canShare({ files: [file] })) {
-        await handleOpenImage();
+        await handleOpenForSave();
         return;
       }
 
@@ -145,16 +146,10 @@ export default function DownloadButton({
         title: "Wallpaper PNG",
         files: [file],
       });
-    } catch (err) {
-      console.error(err);
+    } catch {
+      await handleOpenForSave();
     }
-  }, [
-    canvasToPngBlob,
-    fileName,
-    handleOpenImage,
-    renderWallpaperCanvas,
-    shareSupported,
-  ]);
+  }, [fileName, handleOpenForSave, makePngBlob, shareSupported]);
 
   return (
     <div className="flex flex-col items-center gap-3">
@@ -172,7 +167,7 @@ export default function DownloadButton({
       </button>
 
       <button
-        onClick={handleOpenImage}
+        onClick={handleOpenForSave}
         className="
           px-8 py-3 rounded-full text-sm font-semibold
           border border-zinc-600 bg-zinc-900 text-zinc-100
@@ -180,22 +175,20 @@ export default function DownloadButton({
           transition-all duration-200
         "
       >
-        画像を開いて保存（スマホ向け）
+        画像を表示（保存用）
       </button>
 
-      {shareSupported && (
-        <button
-          onClick={handleShare}
-          className="
-            px-8 py-3 rounded-full text-sm font-semibold
-            border border-blue-500/50 bg-blue-500/10 text-blue-300
-            hover:bg-blue-500/20
-            transition-all duration-200
-          "
-        >
-          共有（対応端末）
-        </button>
-      )}
+      <button
+        onClick={handleShare}
+        className="
+          px-8 py-3 rounded-full text-sm font-semibold
+          border border-blue-500/50 bg-blue-500/10 text-blue-300
+          hover:bg-blue-500/20
+          transition-all duration-200
+        "
+      >
+        共有（推奨）
+      </button>
     </div>
   );
 }
