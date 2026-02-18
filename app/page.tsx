@@ -115,9 +115,23 @@ export default function Home() {
 
   useEffect(() => {
     if (step === "preview") {
-      sessionStorage.setItem(LAST_APP_ROUTE_KEY, "/?step=preview");
+      const previewUrl = `${window.location.pathname}?step=preview`;
+      if (`${window.location.pathname}${window.location.search}` !== previewUrl) {
+        window.history.replaceState(window.history.state, "", previewUrl);
+      }
+      sessionStorage.setItem(
+        LAST_APP_ROUTE_KEY,
+        `${window.location.pathname}${window.location.search}`,
+      );
     } else {
-      sessionStorage.setItem(LAST_APP_ROUTE_KEY, "/");
+      const currentPath = window.location.pathname;
+      if (window.location.search) {
+        window.history.replaceState(window.history.state, "", currentPath);
+      }
+      sessionStorage.setItem(
+        LAST_APP_ROUTE_KEY,
+        `${window.location.pathname}${window.location.search}`,
+      );
     }
   }, [step]);
 
@@ -144,7 +158,7 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+    <div className="min-h-[100dvh] bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <h1 className="text-lg font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">

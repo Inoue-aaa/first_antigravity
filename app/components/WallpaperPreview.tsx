@@ -24,43 +24,43 @@ export default function WallpaperPreview({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [bgImg, setBgImg] = useState<HTMLImageElement | null>(null);
   const [animalImg, setAnimalImg] = useState<HTMLImageElement | null>(null);
-  const [displayScale, setDisplayScale] = useState(1);
+  const [previewWidth, setPreviewWidth] = useState(320);
 
-  // Calculate display scale with debounce and threshold to reduce iOS viewport jitter.
+  // Width-based sizing + raf debounce to reduce iOS Safari viewport jitter.
   useEffect(() => {
     let rafId: number | null = null;
     let timerId: number | null = null;
 
-    const updateScale = () => {
+    const updateWidth = () => {
       const viewportHeight =
         window.visualViewport?.height ?? window.innerHeight;
       const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-      const maxH = viewportHeight * 0.6;
-      const maxW = Math.min(360, viewportWidth - 48);
-      const rawScale = Math.min(maxW / device.width, maxH / device.height);
-      const roundedScale = Math.max(0.1, Math.round(rawScale * 1000) / 1000);
-      setDisplayScale((prev) =>
-        Math.abs(prev - roundedScale) < 0.01 ? prev : roundedScale,
+      const maxByWidth = Math.min(360, viewportWidth - 48);
+      const maxByHeight = (viewportHeight * 0.6 * device.width) / device.height;
+      const target = Math.max(140, Math.min(maxByWidth, maxByHeight));
+      const rounded = Math.round(target);
+      setPreviewWidth((prev) =>
+        Math.abs(prev - rounded) < 1 ? prev : rounded,
       );
     };
 
-    const scheduleScaleUpdate = () => {
+    const scheduleUpdate = () => {
       if (timerId !== null) window.clearTimeout(timerId);
       timerId = window.setTimeout(() => {
         if (rafId !== null) window.cancelAnimationFrame(rafId);
-        rafId = window.requestAnimationFrame(updateScale);
+        rafId = window.requestAnimationFrame(updateWidth);
       }, 100);
     };
 
-    updateScale();
-    window.addEventListener("resize", scheduleScaleUpdate);
-    window.addEventListener("orientationchange", scheduleScaleUpdate);
-    window.visualViewport?.addEventListener("resize", scheduleScaleUpdate);
+    updateWidth();
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("orientationchange", scheduleUpdate);
+    window.visualViewport?.addEventListener("resize", scheduleUpdate);
 
     return () => {
-      window.removeEventListener("resize", scheduleScaleUpdate);
-      window.removeEventListener("orientationchange", scheduleScaleUpdate);
-      window.visualViewport?.removeEventListener("resize", scheduleScaleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("orientationchange", scheduleUpdate);
+      window.visualViewport?.removeEventListener("resize", scheduleUpdate);
       if (timerId !== null) window.clearTimeout(timerId);
       if (rafId !== null) window.cancelAnimationFrame(rafId);
     };
@@ -87,9 +87,13 @@ export default function WallpaperPreview({
     const canvas = canvasRef.current;
     if (!canvas || !bgImg) return;
     const ctx = canvas.getContext("2d")!;
+    const displayScale = previewWidth / device.width;
 
-    const dw = Math.max(1, Math.round(device.width * displayScale));
-    const dh = Math.max(1, Math.round(device.height * displayScale));
+    const dw = Math.max(1, Math.round(previewWidth));
+    const dh = Math.max(
+      1,
+      Math.round((previewWidth * device.height) / device.width),
+    );
     canvas.width = dw;
     canvas.height = dh;
 
@@ -137,7 +141,7 @@ export default function WallpaperPreview({
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
     }
-  }, [bgImg, animalImg, device, displayScale, stickerXPercent]);
+  }, [animalImg, bgImg, device, previewWidth, stickerXPercent]);
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -149,14 +153,14 @@ export default function WallpaperPreview({
       <div
         className="preview-shell rounded-[2rem] overflow-hidden border-4 border-zinc-700 shadow-2xl"
         style={{
-          width: Math.max(1, Math.round(device.width * displayScale)),
-          height: Math.max(1, Math.round(device.height * displayScale)),
+          width: Math.max(1, Math.round(previewWidth)),
+          aspectRatio: `${device.width} / ${device.height}`,
         }}
       >
         <canvas
           ref={canvasRef}
           className="block pixel-canvas"
-          style={{ imageRendering: "pixelated" }}
+          style={{ imageRendering: "pixelated", width: "100%", height: "100%" }}
         />
       </div>
     </div>

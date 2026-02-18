@@ -9,38 +9,35 @@ const LAST_APP_ROUTE_KEY = "lastAppRoute";
 
 export default function ViewPage() {
   const router = useRouter();
-  const [blobUrl] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return sessionStorage.getItem(VIEW_BLOB_URL_KEY);
-  });
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!blobUrl) return;
-
     return () => {
-      URL.revokeObjectURL(blobUrl);
-      sessionStorage.removeItem(VIEW_BLOB_URL_KEY);
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+        sessionStorage.removeItem(VIEW_BLOB_URL_KEY);
+      }
     };
   }, [blobUrl]);
 
+  useEffect(() => {
+    const id = window.requestAnimationFrame(() => {
+      const url = sessionStorage.getItem(VIEW_BLOB_URL_KEY);
+      setBlobUrl(url);
+    });
+
+    return () => window.cancelAnimationFrame(id);
+  }, []);
+
   const handleReturn = useCallback(() => {
-    const returnTo = sessionStorage.getItem(RETURN_TO_KEY);
-    const lastAppRoute = sessionStorage.getItem(LAST_APP_ROUTE_KEY);
-    const fallbackRoute = returnTo ?? lastAppRoute ?? "/?step=preview";
-
-    if (window.history.length > 1) {
-      router.back();
-      window.setTimeout(() => {
-        router.replace(fallbackRoute);
-      }, 350);
-      return;
-    }
-
-    router.replace(fallbackRoute);
+    const returnTo = sessionStorage.getItem(RETURN_TO_KEY) ?? "";
+    const lastAppRoute = sessionStorage.getItem(LAST_APP_ROUTE_KEY) ?? "";
+    const target = returnTo || lastAppRoute || "/?step=preview";
+    router.replace(target);
   }, [router]);
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+    <main className="min-h-[100dvh] bg-zinc-950 text-zinc-100 flex flex-col">
       <div className="mx-auto w-full max-w-3xl px-4 py-6">
         <h1 className="text-xl font-bold">保存用画像</h1>
         <p className="mt-2 text-sm text-zinc-400">
